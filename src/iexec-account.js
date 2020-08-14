@@ -2,9 +2,17 @@
 
 const cli = require('commander');
 const account = require('./account');
+const swap = require('./swap');
 const { Keystore } = require('./keystore');
 const { loadChain, connectKeystore } = require('./chains');
-const { stringifyNestedBn, formatRLC, NULL_ADDRESS } = require('./utils');
+const {
+  stringifyNestedBn,
+  isRlcUnit,
+  isEthUnit,
+  formatRLC,
+  formatEth,
+  NULL_ADDRESS,
+} = require('./utils');
 const {
   help,
   addGlobalOptions,
@@ -17,8 +25,10 @@ const {
   desc,
   Spinner,
   info,
+  prompt,
   pretty,
 } = require('./cli-helper');
+const { weiAmountSchema, nRlcAmountSchema } = require('./validator');
 
 const objName = 'account';
 
@@ -75,6 +85,132 @@ withdraw
       spinner.succeed(info.withdrawn(formatRLC(res.amount)), {
         raw: { amount: res.amount, txHash: res.txHash },
       });
+    } catch (error) {
+      handleError(error, cli, cmd);
+    }
+  });
+
+const depositEth = cli.command('deposit-eth <amount> [unit]');
+addGlobalOptions(depositEth);
+addWalletLoadOptions(depositEth);
+depositEth
+  .option(...option.chain())
+  .option(...option.txGasPrice())
+  .description(desc.depositEth())
+  .action(async (amount, unit = 'wei', cmd) => {
+    await checkUpdate(cmd);
+    const spinner = Spinner(cmd);
+    try {
+      const walletOptions = await computeWalletLoadOptions(cmd);
+      const txOptions = await computeTxOptions(cmd);
+      const keystore = Keystore(walletOptions);
+      const chain = await loadChain(cmd.chain, {
+        spinner,
+      });
+      let weiToSpend;
+      let nRlcToReceive;
+      if (isEthUnit(unit)) {
+        weiToSpend = await weiAmountSchema().validate([amount, unit]);
+        spinner.start(info.checkingSwapRate());
+        nRlcToReceive = await swap.estimateDepositRlcToReceive(
+          chain.contracts,
+          weiToSpend,
+        );
+      } else if (isRlcUnit(unit)) {
+        nRlcToReceive = await nRlcAmountSchema().validate([amount, unit]);
+        spinner.start(info.checkingSwapRate());
+        weiToSpend = await swap.estimateDepositEthToSpend(
+          chain.contracts,
+          nRlcToReceive,
+        );
+      } else {
+        throw new Error('Invalid unit, must be RLC unit or ether unit');
+      }
+      spinner.stop();
+      await prompt.depositEthToRlc(
+        formatEth(weiToSpend),
+        formatRLC(nRlcToReceive),
+      );
+      await connectKeystore(chain, keystore, { txOptions });
+      spinner.start(info.depositing());
+      const { txHash, spentAmount, receivedAmount } = await swap.depositEth(
+        chain.contracts,
+        weiToSpend,
+        nRlcToReceive,
+      );
+      spinner.succeed(
+        info.depositedEth(formatEth(spentAmount), formatRLC(receivedAmount)),
+        {
+          raw: {
+            txHash,
+            spentAmount: spentAmount.toString(),
+            receivedAmount: receivedAmount.toString(),
+          },
+        },
+      );
+    } catch (error) {
+      handleError(error, cli, cmd);
+    }
+  });
+
+const withdrawEth = cli.command('withdraw-eth <amount> [unit]');
+addGlobalOptions(withdrawEth);
+addWalletLoadOptions(withdrawEth);
+withdrawEth
+  .option(...option.chain())
+  .option(...option.txGasPrice())
+  .description(desc.withdrawEth())
+  .action(async (amount, unit = 'nRLC', cmd) => {
+    await checkUpdate(cmd);
+    const spinner = Spinner(cmd);
+    try {
+      const walletOptions = await computeWalletLoadOptions(cmd);
+      const txOptions = await computeTxOptions(cmd);
+      const keystore = Keystore(walletOptions);
+      const chain = await loadChain(cmd.chain, {
+        spinner,
+      });
+      let nRlcToSpend;
+      let weiToReceive;
+      if (isRlcUnit(unit)) {
+        nRlcToSpend = await nRlcAmountSchema().validate([amount, unit]);
+        spinner.start(info.checkingSwapRate());
+        weiToReceive = await swap.estimateWithdrawEthToReceive(
+          chain.contracts,
+          nRlcToSpend,
+        );
+      } else if (isEthUnit(unit)) {
+        weiToReceive = await weiAmountSchema().validate([amount, unit]);
+        spinner.start(info.checkingSwapRate());
+        nRlcToSpend = await swap.estimateWithdrawRlcToSpend(
+          chain.contracts,
+          weiToReceive,
+        );
+      } else {
+        throw new Error('Invalid unit, must be RLC unit or ether unit');
+      }
+      spinner.stop();
+      await prompt.withdrawRlcToEth(
+        formatRLC(nRlcToSpend),
+        formatEth(weiToReceive),
+      );
+      await connectKeystore(chain, keystore, { txOptions });
+      spinner.start(info.withdrawing());
+      const { txHash, spentAmount, receivedAmount } = await swap.withdrawEth(
+        chain.contracts,
+        nRlcToSpend,
+        weiToReceive,
+      );
+      spinner.succeed(
+        info.withdrawnEth(formatRLC(spentAmount), formatEth(receivedAmount)),
+        {
+          raw: {
+            txHash,
+            spentAmount: spentAmount.toString(),
+            receivedAmount: receivedAmount.toString(),
+          },
+        },
+      );
     } catch (error) {
       handleError(error, cli, cmd);
     }
