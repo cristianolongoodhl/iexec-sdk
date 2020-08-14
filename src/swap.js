@@ -3,11 +3,24 @@ const BN = require('bn.js');
 const { Interface } = require('ethers').utils;
 const walletModule = require('./wallet');
 const accountModule = require('./account');
+const orderModule = require('./order');
+const hubModule = require('./hub');
 const swapInterfaceDesc = require('./abi/uniswapv2/EventInterface.json');
-const { ethersBnToBn, bnToEthersBn, NULL_ADDRESS } = require('./utils');
+const {
+  checkEvent,
+  getEventFromLogs,
+  ethersBnToBn,
+  bnToEthersBn,
+  NULL_ADDRESS,
+} = require('./utils');
 const {
   weiAmountSchema,
   nRlcAmountSchema,
+  signedApporderSchema,
+  signedDatasetorderSchema,
+  signedWorkerpoolorderSchema,
+  signedRequestorderSchema,
+  positiveStrictIntSchema,
   throwIfMissing,
 } = require('./validator');
 const { wrapCall, wrapSend, wrapWait } = require('./errorWrappers');
@@ -42,7 +55,7 @@ const estimateDepositRlcToReceive = async (
     );
     return ethersBnToBn(nRlcToReceive);
   } catch (error) {
-    debug('estimateDepositRlcToReceive()', error);
+    debug('estimateDepositRlcToReceive() error', error);
     throw error;
   }
 };
@@ -61,7 +74,7 @@ const estimateDepositEthToSpend = async (
     );
     return ethersBnToBn(weiToSpend);
   } catch (error) {
-    debug('estimateDepositEthToSpend()', error);
+    debug('estimateDepositEthToSpend() error', error);
     throw error;
   }
 };
@@ -80,7 +93,7 @@ const estimateWithdrawRlcToSpend = async (
     );
     return ethersBnToBn(nRlcToSpend);
   } catch (error) {
-    debug('estimateWithdrawRlcToSpend()', error);
+    debug('estimateWithdrawRlcToSpend() error', error);
     throw error;
   }
 };
@@ -99,7 +112,7 @@ const estimateWithdrawEthToReceive = async (
     );
     return ethersBnToBn(weiToReceive);
   } catch (error) {
-    debug('estimateWithdrawEthToReceive()', error);
+    debug('estimateWithdrawEthToReceive() error', error);
     throw error;
   }
 };
@@ -151,7 +164,7 @@ const depositEth = async (
       receivedAmount: received,
     };
   } catch (error) {
-    debug('depositEth()', error);
+    debug('depositEth() error', error);
     throw error;
   }
 };
@@ -226,7 +239,154 @@ const withdrawEth = async (
       receivedAmount: received,
     };
   } catch (error) {
-    debug('withdrawEth()', error);
+    debug('withdrawEth() error', error);
+    throw error;
+  }
+};
+
+const estimateMatchOrderEthToSpend = async (
+  contracts = throwIfMissing(),
+  apporder = throwIfMissing(),
+  datasetorder = orderModule.NULL_DATASETORDER,
+  workerpoolorder = throwIfMissing(),
+  requestorder = throwIfMissing(),
+) => {
+  try {
+    await checkSwapEnabled(contracts);
+    const [
+      vApporder,
+      vDatasetorder,
+      vWorkerpoolorder,
+      vRequestorder,
+    ] = await Promise.all([
+      signedApporderSchema().validate(apporder),
+      signedDatasetorderSchema().validate(datasetorder),
+      signedWorkerpoolorderSchema().validate(workerpoolorder),
+      signedRequestorderSchema().validate(requestorder),
+    ]);
+    const volume = await orderModule.getMatchableVolume(
+      contracts,
+      vApporder,
+      vDatasetorder,
+      vWorkerpoolorder,
+      vRequestorder,
+    );
+    const nRlcPrice = volume.mul(
+      new BN(apporder.appprice)
+        .add(new BN(datasetorder.datasetprice))
+        .add(new BN(workerpoolorder.workerpoolprice)),
+    );
+    const weiToSpend = nRlcPrice.isZero()
+      ? nRlcPrice
+      : await estimateDepositEthToSpend(contracts, nRlcPrice);
+    return { weiToSpend, volume, nRlcPrice };
+  } catch (error) {
+    debug('estimateMatchOrderEthToSpend() error', error);
+    throw error;
+  }
+};
+
+const matchOrdersWithEth = async (
+  contracts = throwIfMissing(),
+  appOrder = throwIfMissing(),
+  datasetOrder = orderModule.NULL_DATASETORDER,
+  workerpoolOrder = throwIfMissing(),
+  requestOrder = throwIfMissing(),
+  weiToSpend = throwIfMissing(),
+  minVolumeToExecute = 1,
+) => {
+  try {
+    await checkSwapEnabled(contracts);
+    const vToSpend = await weiAmountSchema().validate(weiToSpend);
+    const vVolume = await positiveStrictIntSchema().validate(
+      minVolumeToExecute,
+    );
+    const [
+      vAppOrder,
+      vDatasetOrder,
+      vWorkerpoolOrder,
+      vRequestOrder,
+    ] = await Promise.all([
+      signedApporderSchema().validate(appOrder),
+      signedDatasetorderSchema().validate(datasetOrder),
+      signedWorkerpoolorderSchema().validate(workerpoolOrder),
+      signedRequestorderSchema().validate(requestOrder),
+    ]);
+
+    const volumeToExecuteBN = new BN(vVolume);
+
+    // check matchability
+    const matchableVolume = await orderModule.getMatchableVolume(
+      contracts,
+      vAppOrder,
+      vDatasetOrder,
+      vWorkerpoolOrder,
+      vRequestOrder,
+    );
+
+    if (matchableVolume.lt(volumeToExecuteBN)) {
+      throw Error("Can't execute requested volume");
+    }
+
+    // workerpool owner stake check
+    const workerpoolPrice = new BN(vWorkerpoolOrder.workerpoolprice);
+    const workerpoolOwner = await hubModule.getWorkerpoolOwner(
+      contracts,
+      vWorkerpoolOrder.workerpool,
+    );
+    const { stake } = await accountModule.checkBalance(
+      contracts,
+      workerpoolOwner,
+    );
+    const requiredStake = volumeToExecuteBN.mul(
+      workerpoolPrice.mul(new BN(30)).div(new BN(100)),
+    );
+    if (stake.lt(requiredStake)) {
+      throw Error(
+        `workerpool required stake (${requiredStake}) is greather than workerpool owner's account stake (${stake}). Can't execute requested volume.`,
+      );
+    }
+
+    const appOrderStruct = orderModule.signedOrderToStruct(
+      orderModule.APP_ORDER,
+      vAppOrder,
+    );
+    const datasetOrderStruct = orderModule.signedOrderToStruct(
+      orderModule.DATASET_ORDER,
+      vDatasetOrder,
+    );
+    const workerpoolOrderStruct = orderModule.signedOrderToStruct(
+      orderModule.WORKERPOOL_ORDER,
+      vWorkerpoolOrder,
+    );
+    const requestOrderStruct = orderModule.signedOrderToStruct(
+      orderModule.REQUEST_ORDER,
+      vRequestOrder,
+    );
+    const iexecContract = contracts.getIExecContract();
+    const tx = await wrapSend(
+      iexecContract.matchOrdersWithEth(
+        appOrderStruct,
+        datasetOrderStruct,
+        workerpoolOrderStruct,
+        requestOrderStruct,
+        {
+          value: bnToEthersBn(new BN(vToSpend)).toHexString(),
+          gasPrice:
+            (contracts.txOptions && contracts.txOptions.gasPrice) || undefined,
+        },
+      ),
+    );
+    const txReceipt = await wrapWait(tx.wait());
+    const matchEvent = 'OrdersMatched';
+    if (!checkEvent(matchEvent, txReceipt.events)) throw Error(`${matchEvent} not confirmed`);
+    const { dealid, volume } = getEventFromLogs(
+      matchEvent,
+      txReceipt.events,
+    ).args;
+    return { dealid, volume: ethersBnToBn(volume), txHash: tx.hash };
+  } catch (error) {
+    debug('matchOrdersWithEth() error', error);
     throw error;
   }
 };
@@ -237,6 +397,8 @@ module.exports = {
   estimateDepositEthToSpend,
   estimateWithdrawRlcToSpend,
   estimateWithdrawEthToReceive,
+  estimateMatchOrderEthToSpend,
   depositEth,
   withdrawEth,
+  matchOrdersWithEth,
 };

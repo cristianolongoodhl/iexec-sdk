@@ -173,6 +173,7 @@ const option = {
     'specify the params of the request, existing request order will be ignored\n* usage: --params \'{"iexec_args":"dostuff","iexec_input_files":["https://example.com/file.zip"]}\'',
   ],
   appRunWatch: () => ['--watch', 'watch execution status changes'],
+  appRunWithEth: () => ['--use-ether', 'pay run with ether'],
   to: () => ['--to <address>', 'receiver address'],
   skipWallet: () => ['--skip-wallet', 'skip creating a new wallet'],
   forceCreate: () => [
@@ -768,15 +769,6 @@ const isBytes32 = (str, { strict = false } = {}) => {
   return true;
 };
 
-const minBn = (bnArray) => {
-  let min = new BN(bnArray[0]);
-  bnArray.map((e) => {
-    if (e.lt(min)) min = e;
-    return min;
-  });
-  return min;
-};
-
 const renderTasksStatus = (tasksStatusMap) => {
   const tasksArray = Object.values(tasksStatusMap);
   const runningTasksArray = tasksArray.filter(
@@ -859,7 +851,6 @@ module.exports = {
   prettyRPC,
   isEthAddress,
   isBytes32,
-  minBn,
   lbb,
   lba,
   lb,
