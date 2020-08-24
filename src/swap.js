@@ -1,11 +1,13 @@
 const Debug = require('debug');
 const BN = require('bn.js');
+const { Contract } = require('ethers');
 const { Interface } = require('ethers').utils;
 const walletModule = require('./wallet');
 const accountModule = require('./account');
 const orderModule = require('./order');
 const hubModule = require('./hub');
 const swapInterfaceDesc = require('./abi/uniswapv2/EventInterface.json');
+const erc1538Desc = require('./abi/erc1538QueryDelegate/erc1538Interface.json');
 const {
   checkEvent,
   getEventFromLogs,
@@ -31,14 +33,28 @@ const checkSwapEnabled = async (
   contracts = throwIfMissing(),
   strict = true,
 ) => {
-  if (contracts.isNative) {
+  let isSwapEnabled;
+  try {
+    const iexecContract = contracts.getIExecContract();
+    const iexecContractAddress = await iexecContract.resolvedAddress;
+    const erc1538Proxy = new Contract(
+      iexecContractAddress,
+      erc1538Desc.abi,
+      contracts.provider,
+    );
+    isSwapEnabled = await erc1538Proxy.functionExists(
+      'safeDepositEth(uint256)',
+    );
+  } catch (error) {
+    debug('checkSwapEnabled() error', error);
+    throw error;
+  }
+  if (!isSwapEnabled) {
     if (strict) {
       throw new Error('Ether/RLC swap is not enabled on current chain');
     }
-    return false;
   }
-  debug('checkSwapEnabled() TODO');
-  return true;
+  return isSwapEnabled;
 };
 
 const estimateDepositRlcToReceive = async (
