@@ -314,6 +314,9 @@ const matchOrdersWithEth = async (
   try {
     await checkSwapEnabled(contracts);
     const vToSpend = await weiAmountSchema().validate(weiToSpend);
+    if (new BN(vToSpend).isZero()) {
+      throw Error("Value to spend can't be 0");
+    }
     const vVolume = await positiveStrictIntSchema().validate(
       minVolumeToExecute,
     );

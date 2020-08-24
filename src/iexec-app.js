@@ -819,7 +819,11 @@ run
           requestorder,
         );
       } else {
-        const { weiToSpend, volume } = await estimateMatchOrderEthToSpend(
+        const {
+          weiToSpend,
+          volume,
+          nRlcPrice,
+        } = await estimateMatchOrderEthToSpend(
           chain.contracts,
           apporder,
           datasetorder,
@@ -864,15 +868,25 @@ run
         );
 
         spinner.start('Submitting deal');
-        matchResult = await matchOrdersWithEth(
-          chain.contracts,
-          apporder,
-          datasetorder,
-          workerpoolorder,
-          requestorder,
-          weiToSpend,
-          volume,
-        );
+        if (nRlcPrice.isZero()) {
+          matchResult = await matchOrders(
+            chain.contracts,
+            apporder,
+            datasetorder,
+            workerpoolorder,
+            requestorder,
+          );
+        } else {
+          matchResult = await matchOrdersWithEth(
+            chain.contracts,
+            apporder,
+            datasetorder,
+            workerpoolorder,
+            requestorder,
+            weiToSpend,
+            volume,
+          );
+        }
       }
 
       const { dealid, volume, txHash } = matchResult;
