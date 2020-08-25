@@ -116,6 +116,13 @@ depositEth
           chain.contracts,
           weiToSpend,
         );
+        if (nRlcToReceive.isZero()) {
+          throw Error(
+            `Specified amount (${formatEth(
+              weiToSpend,
+            )} ether) is lower than minimum amount. Try to increase the ether amount to deposit or specify the RLC wanted amount with "iexec deposit-eth <amount> RLC"`,
+          );
+        }
       } else if (isRlcUnit(unit)) {
         nRlcToReceive = await nRlcAmountSchema().validate([amount, unit]);
         spinner.start(info.checkingSwapRate());
@@ -179,6 +186,13 @@ withdrawEth
           chain.contracts,
           nRlcToSpend,
         );
+        if (weiToReceive.isZero()) {
+          throw Error(
+            `Specified amount (${formatRLC(
+              nRlcToSpend,
+            )} RLC) is lower than minimum amount. Try to increase the RLC amount to withdraw or specify the ether wanted amount with "iexec withdraw-eth <amount> ether"`,
+          );
+        }
       } else if (isEthUnit(unit)) {
         weiToReceive = await weiAmountSchema().validate([amount, unit]);
         spinner.start(info.checkingSwapRate());
