@@ -64,7 +64,7 @@ const estimateDepositRlcToReceive = async (
   try {
     await checkSwapEnabled(contracts);
     const vAmount = await weiAmountSchema().validate(weiToSpend);
-    if (new BN(vAmount).lte(new BN(0))) throw Error('amount must be greather than 0');
+    if (new BN(vAmount).lte(new BN(0))) throw Error('Amount to spend must be greather than 0');
     const iexecContract = contracts.getIExecContract();
     const nRlcToReceive = await wrapCall(
       iexecContract.estimateDepositEthSent(vAmount),
@@ -83,7 +83,7 @@ const estimateDepositEthToSpend = async (
   try {
     await checkSwapEnabled(contracts);
     const vAmount = await nRlcAmountSchema().validate(nRlcToReceive);
-    if (new BN(vAmount).lte(new BN(0))) throw Error('amount must be greather than 0');
+    if (new BN(vAmount).lte(new BN(0))) throw Error('Amount to receive must be greather than 0');
     const iexecContract = contracts.getIExecContract();
     const weiToSpend = await wrapCall(
       iexecContract.estimateDepositTokenWanted(vAmount),
@@ -102,7 +102,7 @@ const estimateWithdrawRlcToSpend = async (
   try {
     await checkSwapEnabled(contracts);
     const vAmount = await weiAmountSchema().validate(weiToReceive);
-    if (new BN(vAmount).lte(new BN(0))) throw Error('amount must be greather than 0');
+    if (new BN(vAmount).lte(new BN(0))) throw Error('Amount to receive must be greather than 0');
     const iexecContract = contracts.getIExecContract();
     const nRlcToSpend = await wrapCall(
       iexecContract.estimateWithdrawEthWanted(vAmount),
@@ -121,7 +121,7 @@ const estimateWithdrawEthToReceive = async (
   try {
     await checkSwapEnabled(contracts);
     const vAmount = await nRlcAmountSchema().validate(nRlcToSpend);
-    if (new BN(vAmount).lte(new BN(0))) throw Error('amount must be greather than 0');
+    if (new BN(vAmount).lte(new BN(0))) throw Error('Amount to spend must be greather than 0');
     const iexecContract = contracts.getIExecContract();
     const weiToReceive = await wrapCall(
       iexecContract.estimateWithdrawTokenSent(vAmount),
@@ -141,6 +141,7 @@ const depositEth = async (
   try {
     await checkSwapEnabled(contracts);
     const vToSpend = await weiAmountSchema().validate(weiToSpend);
+    if (new BN(vToSpend).lte(new BN(0))) throw Error('Amount to deposit must be greather than 0');
     const vToReceive = await nRlcAmountSchema().validate(nRlcToReceive);
     const userAddress = await walletModule.getAddress(contracts);
     const balances = await walletModule.checkBalances(contracts, userAddress);
@@ -193,6 +194,7 @@ const withdrawEth = async (
   try {
     await checkSwapEnabled(contracts);
     const vToSpend = await nRlcAmountSchema().validate(nRlcToSpend);
+    if (new BN(vToSpend).lte(new BN(0))) throw Error('Amount to withdraw must be greather than 0');
     const vToReceive = await weiAmountSchema().validate(weiToReceive);
     const userAddress = await walletModule.getAddress(contracts);
     const { stake } = await accountModule.checkBalance(contracts, userAddress);
@@ -315,7 +317,9 @@ const matchOrdersWithEth = async (
     await checkSwapEnabled(contracts);
     const vToSpend = await weiAmountSchema().validate(weiToSpend);
     if (new BN(vToSpend).isZero()) {
-      throw Error("Value to spend can't be 0");
+      throw Error(
+        "Value to spend can't be 0, if no RLC is required use matchOrders() instead of matchOrdersWithEth()",
+      );
     }
     const vVolume = await positiveStrictIntSchema().validate(
       minVolumeToExecute,
@@ -344,7 +348,9 @@ const matchOrdersWithEth = async (
     );
 
     if (matchableVolume.lt(volumeToExecuteBN)) {
-      throw Error("Can't execute requested volume");
+      throw Error(
+        `Available volume ${matchableVolume} is lower than requested volume ${volumeToExecuteBN}`,
+      );
     }
 
     // workerpool owner stake check
