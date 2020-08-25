@@ -173,7 +173,7 @@ const option = {
     'specify the params of the request, existing request order will be ignored\n* usage: --params \'{"iexec_args":"dostuff","iexec_input_files":["https://example.com/file.zip"]}\'',
   ],
   appRunWatch: () => ['--watch', 'watch execution status changes'],
-  appRunWithEth: () => ['--use-ether', 'pay run with ether'],
+  appRunWithEth: () => ['--use-eth', 'pay run with ether'],
   to: () => ['--to <address>', 'receiver address'],
   skipWallet: () => ['--skip-wallet', 'skip creating a new wallet'],
   forceCreate: () => [

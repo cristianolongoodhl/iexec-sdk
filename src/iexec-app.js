@@ -760,7 +760,7 @@ run
 
       let matchResult;
 
-      if (!opts.useEther) {
+      if (!opts.useEth) {
         const totalCost = new BN(requestorder.appmaxprice)
           .add(new BN(requestorder.datasetmaxprice))
           .add(new BN(requestorder.workerpoolmaxprice))
@@ -819,11 +819,7 @@ run
           requestorder,
         );
       } else {
-        const {
-          weiToSpend,
-          volume,
-          nRlcPrice,
-        } = await estimateMatchOrderEthToSpend(
+        const { weiToSpend, nRlcPrice } = await estimateMatchOrderEthToSpend(
           chain.contracts,
           apporder,
           datasetorder,
@@ -834,7 +830,7 @@ run
         await prompt.custom(
           `Do you want to spend ${formatEth(
             weiToSpend,
-          )} ether to execute the following request (${volume} task): ${pretty({
+          )} ether to execute the following request: ${pretty({
             app: `${requestorder.app} (${formatRLC(
               requestorder.appmaxprice,
             )} RLC)`,
@@ -884,7 +880,11 @@ run
             workerpoolorder,
             requestorder,
             weiToSpend,
-            volume,
+          );
+          spinner.info(
+            `Swapped ${formatEth(
+              matchResult.spentAmount,
+            )} ether to pay ${formatRLC(matchResult.lockedAmount)} RLC`,
           );
         }
       }

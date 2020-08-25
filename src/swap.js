@@ -29,6 +29,38 @@ const { wrapCall, wrapSend, wrapWait } = require('./errorWrappers');
 
 const debug = Debug('iexec:swap');
 
+const getSwapEventValues = (
+  txReceipt,
+  { rlcContractAddress, fromAddress, toAddress },
+) => {
+  const transferRlcToIexecContractEvent = txReceipt.events
+    && txReceipt.events.find((event) => {
+      if (event.event === 'Transfer') {
+        if (
+          event.address === rlcContractAddress
+          && event.args
+          && (fromAddress ? event.args.from === fromAddress : event.args.from)
+          && (toAddress ? event.args.to === toAddress : event.args.to)
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
+  const swapContractAddress = transferRlcToIexecContractEvent.args.from;
+  const swapInterface = new Interface(swapInterfaceDesc.abi);
+  const swapEventValues = txReceipt.events
+    .filter(event => event.address === swapContractAddress)
+    .reduce((acc, event) => {
+      try {
+        return swapInterface.decodeEventLog('Swap', event.data);
+      } catch (e) {
+        return acc;
+      }
+    }, null);
+  return swapEventValues;
+};
+
 const checkSwapEnabled = async (
   contracts = throwIfMissing(),
   strict = true,
@@ -141,14 +173,16 @@ const depositEth = async (
   try {
     await checkSwapEnabled(contracts);
     const vToSpend = await weiAmountSchema().validate(weiToSpend);
-    if (new BN(vToSpend).lte(new BN(0))) throw Error('Amount to deposit must be greather than 0');
+    if (new BN(vToSpend).lte(new BN(0))) throw Error('wei amount to deposit must be greather than 0');
     const vToReceive = await nRlcAmountSchema().validate(nRlcToReceive);
+    if (new BN(vToReceive).lte(new BN(0))) throw Error('nRLC amount to receive must be greather than 0');
     const userAddress = await walletModule.getAddress(contracts);
     const balances = await walletModule.checkBalances(contracts, userAddress);
     const toSpendBN = new BN(vToSpend);
     if (balances.wei.lt(toSpendBN)) throw Error('Deposit amount exceed wallet balance');
     const iexecContract = contracts.getIExecContract();
     const iexecContractAddress = await iexecContract.resolvedAddress;
+    const rlcContractAddress = await contracts.fetchRLCAddress();
     const tx = await wrapSend(
       iexecContract.safeDepositEth(vToReceive, {
         value: bnToEthersBn(toSpendBN).toHexString(),
@@ -174,10 +208,19 @@ const depositEth = async (
     if (!mintEvent) {
       throw Error(`Deposit ether transaction failed (txHash: ${tx.hash})`);
     }
+    const swapEventValues = getSwapEventValues(txReceipt, {
+      rlcContractAddress,
+      toAddress: iexecContractAddress,
+    });
+    debug('swapEventValues', swapEventValues);
+    if (!swapEventValues || !swapEventValues.amount0In) {
+      throw Error(`Deposit ether transaction failed (txHash: ${tx.hash})`);
+    }
     const received = ethersBnToBn(mintEvent.args.value);
+    const spent = ethersBnToBn(swapEventValues.amount0In);
     return {
       txHash: tx.hash,
-      spentAmount: toSpendBN,
+      spentAmount: spent,
       receivedAmount: received,
     };
   } catch (error) {
@@ -194,66 +237,37 @@ const withdrawEth = async (
   try {
     await checkSwapEnabled(contracts);
     const vToSpend = await nRlcAmountSchema().validate(nRlcToSpend);
-    if (new BN(vToSpend).lte(new BN(0))) throw Error('Amount to withdraw must be greather than 0');
+    if (new BN(vToSpend).lte(new BN(0))) throw Error('nRLC amount to withdraw must be greather than 0');
     const vToReceive = await weiAmountSchema().validate(weiToReceive);
+    if (new BN(vToReceive).lte(new BN(0))) throw Error('wei amount to receive must be greather than 0');
     const userAddress = await walletModule.getAddress(contracts);
     const { stake } = await accountModule.checkBalance(contracts, userAddress);
     const toSpendBN = new BN(vToSpend);
     if (stake.lt(toSpendBN)) throw Error('Withdraw amount exceed account balance');
     const iexecContract = contracts.getIExecContract();
     const iexecContractAddress = await iexecContract.resolvedAddress;
+    const rlcContractAddress = await contracts.fetchRLCAddress();
     const tx = await wrapSend(
       iexecContract.safeWithdrawEth(vToSpend, vToReceive, contracts.txOptions),
     );
-    const rlcContractAddress = await contracts.fetchRLCAddress();
     const txReceipt = await wrapWait(tx.wait());
-    const transferRlcToSwapContractEvent = txReceipt.events
-      && txReceipt.events.find((event) => {
-        if (event.event === 'Transfer') {
-          if (
-            event.address === rlcContractAddress
-            && event.args
-            && event.args.from === iexecContractAddress
-            && event.args.to
-          ) {
-            return true;
-          }
-        }
-        return false;
-      });
-    const swapContractAddress = transferRlcToSwapContractEvent.args.to;
-    const swapInterface = new Interface(swapInterfaceDesc.abi);
-    const swapEventValues = txReceipt.events
-      .filter(event => event.address === swapContractAddress)
-      .reduce((acc, event) => {
-        try {
-          const {
-            sender,
-            to,
-            amount0In,
-            amount1In,
-            amount0Out,
-            amount1Out,
-          } = swapInterface.decodeEventLog('Swap', event.data);
-          return {
-            sender,
-            to,
-            amount0In,
-            amount1In,
-            amount0Out,
-            amount1Out,
-          };
-        } catch (e) {
-          return acc;
-        }
-      }, null);
-    if (!swapEventValues || !swapEventValues.amount0Out) {
+    const swapEventValues = getSwapEventValues(txReceipt, {
+      rlcContractAddress,
+      fromAddress: iexecContractAddress,
+    });
+    debug('swapEventValues', swapEventValues);
+    if (
+      !swapEventValues
+      || !swapEventValues.amount0Out
+      || !swapEventValues.amount1In
+    ) {
       throw Error(`Withdraw ether transaction failed (txHash: ${tx.hash})`);
     }
     const received = ethersBnToBn(swapEventValues.amount0Out);
+    const spent = ethersBnToBn(swapEventValues.amount1In);
     return {
       txHash: tx.hash,
-      spentAmount: toSpendBN,
+      spentAmount: spent,
       receivedAmount: received,
     };
   } catch (error) {
@@ -389,6 +403,14 @@ const matchOrdersWithEth = async (
       vRequestOrder,
     );
     const iexecContract = contracts.getIExecContract();
+    const iexecContractAddress = await iexecContract.resolvedAddress;
+    const rlcContractAddress = await contracts.fetchRLCAddress();
+    const balances = await walletModule.checkBalances(
+      contracts,
+      await walletModule.getAddress(),
+    );
+    const toSpendBN = new BN(vToSpend);
+    if (balances.wei.lt(toSpendBN)) throw Error('Ether amount to swap exceed wallet balance');
     const tx = await wrapSend(
       iexecContract.matchOrdersWithEth(
         appOrderStruct,
@@ -396,7 +418,7 @@ const matchOrdersWithEth = async (
         workerpoolOrderStruct,
         requestOrderStruct,
         {
-          value: bnToEthersBn(new BN(vToSpend)).toHexString(),
+          value: bnToEthersBn(toSpendBN).toHexString(),
           gasPrice:
             (contracts.txOptions && contracts.txOptions.gasPrice) || undefined,
         },
@@ -404,12 +426,32 @@ const matchOrdersWithEth = async (
     );
     const txReceipt = await wrapWait(tx.wait());
     const matchEvent = 'OrdersMatched';
-    if (!checkEvent(matchEvent, txReceipt.events)) throw Error(`${matchEvent} not confirmed`);
+    if (!checkEvent(matchEvent, txReceipt.events)) throw Error(`${matchEvent} not confirmed (tx: ${tx.hash})`);
     const { dealid, volume } = getEventFromLogs(
       matchEvent,
       txReceipt.events,
     ).args;
-    return { dealid, volume: ethersBnToBn(volume), txHash: tx.hash };
+    const swapEventValues = getSwapEventValues(txReceipt, {
+      rlcContractAddress,
+      toAddress: iexecContractAddress,
+    });
+    debug('swapEventValues', swapEventValues);
+    if (
+      !swapEventValues
+      || !swapEventValues.amount0In
+      || !swapEventValues.amount1Out
+    ) {
+      throw Error(`Failed to retrieve swap values (tx: ${tx.hash})`);
+    }
+    const spent = ethersBnToBn(swapEventValues.amount0In);
+    const received = ethersBnToBn(swapEventValues.amount1Out);
+    return {
+      dealid,
+      volume: ethersBnToBn(volume),
+      txHash: tx.hash,
+      spentAmount: spent,
+      lockedAmount: received,
+    };
   } catch (error) {
     debug('matchOrdersWithEth() error', error);
     throw error;
