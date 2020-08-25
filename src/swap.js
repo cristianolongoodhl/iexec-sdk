@@ -5,7 +5,6 @@ const { Interface } = require('ethers').utils;
 const walletModule = require('./wallet');
 const accountModule = require('./account');
 const orderModule = require('./order');
-const hubModule = require('./hub');
 const swapInterfaceDesc = require('./abi/uniswapv2/EventInterface.json');
 const erc1538Desc = require('./abi/erc1538QueryDelegate/erc1538Interface.json');
 const {
@@ -22,7 +21,6 @@ const {
   signedDatasetorderSchema,
   signedWorkerpoolorderSchema,
   signedRequestorderSchema,
-  positiveStrictIntSchema,
   throwIfMissing,
 } = require('./validator');
 const { wrapCall, wrapSend, wrapWait } = require('./errorWrappers');
@@ -325,7 +323,6 @@ const matchOrdersWithEth = async (
   workerpoolOrder = throwIfMissing(),
   requestOrder = throwIfMissing(),
   weiToSpend = throwIfMissing(),
-  minVolumeToExecute = 1,
 ) => {
   try {
     await checkSwapEnabled(contracts);
@@ -335,9 +332,6 @@ const matchOrdersWithEth = async (
         "Value to spend can't be 0, if no RLC is required use matchOrders() instead of matchOrdersWithEth()",
       );
     }
-    const vVolume = await positiveStrictIntSchema().validate(
-      minVolumeToExecute,
-    );
     const [
       vAppOrder,
       vDatasetOrder,
@@ -350,41 +344,14 @@ const matchOrdersWithEth = async (
       signedRequestorderSchema().validate(requestOrder),
     ]);
 
-    const volumeToExecuteBN = new BN(vVolume);
-
     // check matchability
-    const matchableVolume = await orderModule.getMatchableVolume(
+    await orderModule.getMatchableVolume(
       contracts,
       vAppOrder,
       vDatasetOrder,
       vWorkerpoolOrder,
       vRequestOrder,
     );
-
-    if (matchableVolume.lt(volumeToExecuteBN)) {
-      throw Error(
-        `Available volume ${matchableVolume} is lower than requested volume ${volumeToExecuteBN}`,
-      );
-    }
-
-    // workerpool owner stake check
-    const workerpoolPrice = new BN(vWorkerpoolOrder.workerpoolprice);
-    const workerpoolOwner = await hubModule.getWorkerpoolOwner(
-      contracts,
-      vWorkerpoolOrder.workerpool,
-    );
-    const { stake } = await accountModule.checkBalance(
-      contracts,
-      workerpoolOwner,
-    );
-    const requiredStake = volumeToExecuteBN.mul(
-      workerpoolPrice.mul(new BN(30)).div(new BN(100)),
-    );
-    if (stake.lt(requiredStake)) {
-      throw Error(
-        `workerpool required stake (${requiredStake}) is greather than workerpool owner's account stake (${stake}). Can't execute requested volume.`,
-      );
-    }
 
     const appOrderStruct = orderModule.signedOrderToStruct(
       orderModule.APP_ORDER,

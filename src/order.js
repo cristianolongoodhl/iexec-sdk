@@ -1063,6 +1063,24 @@ const getMatchableVolume = async (
       );
     }
 
+    // workerpool owner stake check
+    const workerpoolOwner = await getWorkerpoolOwner(
+      contracts,
+      vWorkerpoolOrder.workerpool,
+    );
+    const { stake } = await checkBalance(contracts, workerpoolOwner);
+    const requiredStakePerTask = workerpoolPrice
+      .mul(new BN(30))
+      .div(new BN(100));
+    const workerpoolStakedVolume = requiredStakePerTask.isZero()
+      ? new BN(workerpoolOrder.volume)
+      : stake.div(requiredStakePerTask);
+    if (workerpoolStakedVolume.isZero()) {
+      throw Error(
+        `workerpool required stake (${requiredStakePerTask}) is greather than workerpool owner's account stake (${stake}). Orders can't be matched. If you are the workerpool owner, you should deposit to top up your account`,
+      );
+    }
+
     // check matchable volume
     const volumes = await Promise.all(
       vRequestOrder.dataset !== NULL_ADDRESS
@@ -1115,7 +1133,7 @@ const getMatchableVolume = async (
     );
     return volumes.reduce(
       (min, curr) => (curr.lt(min) ? curr : min),
-      volumes[0],
+      workerpoolStakedVolume,
     );
   } catch (error) {
     debug('getMatchableVolume()', error);
@@ -1167,25 +1185,7 @@ const matchOrders = async (
       }
     };
 
-    // workerpool owner stake check
-    const checkWorkerpoolStakeAsync = async () => {
-      const workerpoolOwner = await getWorkerpoolOwner(
-        contracts,
-        vWorkerpoolOrder.workerpool,
-      );
-      const { stake } = await checkBalance(contracts, workerpoolOwner);
-      const requiredStake = workerpoolPrice.mul(new BN(30)).div(new BN(100));
-      if (stake.lt(requiredStake)) {
-        throw Error(
-          `workerpool required stake (${requiredStake}) is greather than workerpool owner's account stake (${stake}). Orders can't be matched. If you are the workerpool owner, you should deposit to top up your account`,
-        );
-      }
-    };
-
-    await Promise.all([
-      checkRequesterSolvabilityAsync(),
-      checkWorkerpoolStakeAsync(),
-    ]);
+    await checkRequesterSolvabilityAsync();
 
     const appOrderStruct = signedOrderToStruct(APP_ORDER, vAppOrder);
     const datasetOrderStruct = signedOrderToStruct(
