@@ -311,6 +311,7 @@ iexec account withdraw 1000 # withdraw RLC from your account to your wallet
   - [orderbook](#orderbook)
   - [deal](#deal)
   - [task](#task)
+  - [storage](#storage)
   - [result](#result)
   - [category](#category)
   - [registry](#registry)
@@ -1128,8 +1129,6 @@ console.log('Nano RLC locked:', balance.locked.toString());
 iexec.**account.deposit ( nRlcAmount: NRlcAmount )** => Promise < **{ amount: BN, txHash: TxHash }** >
 
 > deposit some nRLC (1 nRLC = 1\*10^-9 RLC) from user wallet to user account
->
-> The deposit include 2 transaction (1st to approve the iexec clerk SC, 2nd for deposit)
 
 _Example:_
 
@@ -1149,7 +1148,135 @@ _Example:_
 
 ```js
 const { amount, txHash } = await iexec.account.withdraw('1000000000');
-console.log('Withdrawed:', amount);
+console.log('Withdrawn:', amount);
+console.log('tx:', txHash);
+```
+
+#### estimateDepositRlcToReceive
+
+:warning: **DISCLAIMER: This method use [Uniswap V2](https://uniswap.org/) decentralized exchange protocol to perform instant swap between ether and RLC. iExec disclaims any kind of warranty for using Uniswap protocol.** :warning:
+
+iexec.**account.estimateDepositRlcToReceive (weiToSpend: WeiAmount)** => Promise < **nRlcToReceive: BN** >
+
+> get the current value in nRLC for a given wei amount deposited
+
+_Example:_
+
+```js
+const nRlcToReceive = await iexec.account.estimateDepositRlcToReceive(
+  '1000000000',
+);
+console.log(
+  `Swap 1000000000 wei from your wallet to get ${nRlcToReceive} nRLC on your account`,
+);
+```
+
+#### estimateDepositEthToSpend
+
+:warning: **DISCLAIMER: This method use [Uniswap V2](https://uniswap.org/) decentralized exchange protocol to perform instant swap between ether and RLC. iExec disclaims any kind of warranty for using Uniswap protocol.** :warning:
+
+iexec.**account.estimateDepositEthToSpend (nRlcToReceive: NRlcAmount)** => Promise < **weiToSpend: BN** >
+
+> get the current amount to deposit in wei for a wanted nRLC amount
+
+_Example:_
+
+```js
+const weiToSpend = await iexec.account.estimateDepositEthToSpend('1000000000');
+console.log(
+  `Swap ${weiToSpend} wei from your wallet to get 1000000000 nRLC on your account`,
+);
+```
+
+#### depositEth
+
+:warning: **DISCLAIMER: This method use [Uniswap V2](https://uniswap.org/) decentralized exchange protocol to perform instant swap between ether and RLC. iExec disclaims any kind of warranty for using Uniswap protocol.** :warning:
+
+iexec.**account.depositEth (weiToSpend: WeiAmount, nRlcToReceive: NRlcAmount)** => Promise < **{ spentWei: BN, receivedNRlc: BN, txHash: TxHash }** >
+
+> swap some wei from user wallet for nRLC on user account
+> use [`estimateDepositEthToSpend`](#estimateDepositEthToSpend) or [`estimateDepositRlcToReceive`](#estimateDepositRlcToReceive) to get current swap rate for `weiToSpend` and `nRlcToReceive`
+>
+> `nRlcToReceive` is the minimum nRLC amount wanted:
+>
+> - if the swap not possible with current swap rate the transaction will revert
+> - if the swap rate is better than expected the user may receive more nRLC
+
+_Example:_
+
+```js
+const { receivedNRlc, spentWei, txHash } = await iexec.account.depositEth(
+  '1000000000',
+  '300',
+);
+console.log(
+  `Deposited ${receivedNRlc} nRLC on account, swapped from ${spentWei} wei`,
+);
+console.log('tx:', txHash);
+```
+
+#### estimateWithdrawEthToReceive
+
+:warning: **DISCLAIMER: This method use [Uniswap V2](https://uniswap.org/) decentralized exchange protocol to perform instant swap between ether and RLC. iExec disclaims any kind of warranty for using Uniswap protocol.** :warning:
+
+iexec.**account.estimateWithdrawEthToReceive (nRlcToSpend: NRlcAmount)** => Promise < **weiToReceive: BN** >
+
+> get the current value in wei for a given nRLC amount withrawn
+
+_Example:_
+
+```js
+const weiToReceive = await iexec.account.estimateWithdrawEthToReceive(
+  '1000000000',
+);
+console.log(
+  `Swap 1000000000 nRLC from your account to get ${weiToReceive} wei in your wallet`,
+);
+```
+
+#### estimateWithdrawRlcToSpend
+
+:warning: **DISCLAIMER: This method use [Uniswap V2](https://uniswap.org/) decentralized exchange protocol to perform instant swap between ether and RLC. iExec disclaims any kind of warranty for using Uniswap protocol.** :warning:
+
+iexec.**account.estimateWithdrawRlcToSpend (weiToReceive: WeiAmount)** => Promise < **nRlcToSpend: BN** >
+
+> get the current amount to withdraw in nRLC for a wanted wei amount
+
+_Example:_
+
+```js
+const nRlcToSpend = await iexec.account.estimateWithdrawRlcToSpend(
+  '1000000000',
+);
+console.log(
+  `Swap ${nRlcToSpend} nRLC from your account to get 1000000000 wei in your wallet`,
+);
+```
+
+#### withdrawEth
+
+:warning: **DISCLAIMER: This method use [Uniswap V2](https://uniswap.org/) decentralized exchange protocol to perform instant swap between ether and RLC. iExec disclaims any kind of warranty for using Uniswap protocol.** :warning:
+
+iexec.**account.withdrawEth (nRlcToSpend: NRlcAmount, weiToReceive: WeiAmount)** => Promise < **{ spentNRlc: BN, receivedWei: BN, txHash: TxHash }** >
+
+> swap some nRLC from user account for wei in user wallet
+> use [`estimateWithdrawRlcToSpend`](#estimateWithdrawRlcToSpend) or [`estimateWithdrawEthToReceive`](#estimateWithdrawEthToReceive) to get current swap rate for `nRlcToSpend` and `weiToReceive`
+>
+> `weiToReceive` is the minimum wei amount wanted:
+>
+> - if the swap not possible with current swap rate the transaction will revert
+> - if the swap rate is better than expected the user may receive more wei
+
+_Example:_
+
+```js
+const { receivedWei, spentNRlc, txHash } = await iexec.account.withdrawEth(
+  '30 RLC',
+  '0.1 ether',
+);
+console.log(
+  `Withdrawn ${receivedWei} wei, swapped from ${spentNRlc} staked nRLC`,
+);
 console.log('tx:', txHash);
 ```
 
@@ -1822,7 +1949,7 @@ await iexec.order.cancelRequestorder(signedRequestorder);
 
 #### matchOrders
 
-iexec.**order.matchOrders ( { apporder: SignedApporder, workerpoolorder: SignedWorkerpoolorder, requestorder: SignedRequestorder \[, datasetorder: SignedDatasetorder \]} \[, options: Object \] )** => Promise < **{ dealid: Bytes32, volume: Uint256, txHash: TxHash }** >
+iexec.**order.matchOrders ( { apporder: SignedApporder, workerpoolorder: SignedWorkerpoolorder, requestorder: SignedRequestorder \[, datasetorder: SignedDatasetorder \]} \[, options: Object \] )** => Promise < **{ dealid: Bytes32, volume: BN, txHash: TxHash }** >
 
 > make a deal on-chain with compatible orders and trigger off-chain computation.
 >
@@ -1833,12 +1960,72 @@ iexec.**order.matchOrders ( { apporder: SignedApporder, workerpoolorder: SignedW
 _Example:_
 
 ```js
-const res = await iexec.order.matchOrders(
-  signedApporder,
-  signedDatasetorder,
-  signedRequestorder,
-);
+const res = await iexec.order.matchOrders({
+  apporder,
+  datasetorder,
+  workerpoolorder,
+});
 console.log('deal:', res.dealid);
+```
+
+#### estimateMatchOrderEthToSpend
+
+:warning: **DISCLAIMER: This method use [Uniswap V2](https://uniswap.org/) decentralized exchange protocol to perform instant swap between ether and RLC. iExec disclaims any kind of warranty for using Uniswap protocol.** :warning:
+
+iexec.**order.estimateMatchOrderEthToSpend ( { apporder: SignedApporder, workerpoolorder: SignedWorkerpoolorder, requestorder: SignedRequestorder \[, datasetorder: SignedDatasetorder \]} )** => Promise < **{ volume: BN, weiToSpend: BN, nRlcValue: BN }** >
+
+> estimate wei amount to spend to make a deal on-chain with compatible orders and trigger off-chain computation.
+
+_Example:_
+
+```js
+const {
+  volume,
+  weiToSpend,
+  nRlcValue,
+} = await iexec.order.estimateMatchOrderEthToSpend({
+  apporder,
+  datasetorder,
+  workerpoolorder,
+});
+console.log(
+  `Spend ${weiToSpend} wei from your wallet to execute ${volume} tasks (valuated at ${nRlcValue} nRLC)`,
+);
+```
+
+#### matchOrdersWithEth
+
+:warning: **DISCLAIMER: This method use [Uniswap V2](https://uniswap.org/) decentralized exchange protocol to perform instant swap between ether and RLC. iExec disclaims any kind of warranty for using Uniswap protocol.** :warning:
+
+iexec.**order.matchOrdersWithEth ( { apporder: SignedApporder, workerpoolorder: SignedWorkerpoolorder, requestorder: SignedRequestorder \[, datasetorder: SignedDatasetorder \]}, weiToSpend: WeiAmount \[, options: Object \] )** => Promise < **{ dealid: Bytes32, volume: BN, txHash: TxHash, spentWei: BN, nRlcValue: BN }** >
+
+> pay with ether to make a deal on-chain with compatible orders and trigger off-chain computation.
+> use [`estimateMatchOrderEthToSpend`](#estimateMatchOrderEthToSpend) to get current `weiToSpend` to perform matchOrdersWithEth
+>
+> _options:_
+>
+> - `checkRequest`: boolean, default `true`. Perform advanced checks on request and throw if request inconsistency is found (this may prevent creating always failing task).
+
+_Example:_
+
+```js
+const {
+  dealid,
+  volume,
+  spentWei,
+  nRlcValue,
+} = await iexec.order.matchOrdersWithEth(
+  {
+    apporder,
+    datasetorder,
+    workerpoolorder,
+  },
+  '1000000',
+);
+console.log('deal:', dealid);
+console.log(
+  `swapped ${spentWei} wei from your wallet to execute ${volume} tasks (valuated at ${nRlcValue} nRLC)`,
+);
 ```
 
 ### iexec.deal
@@ -2552,7 +2739,7 @@ Accepted:
 Accepted:
 
 - Number
-- String with optionnal unit (ex: `'1000000'`, `'0.01 ether'`)
+- String with optional unit (ex: `'1000000'`, `'0.01 ether'`)
   - accepted units: `ether` (`eth`), `finney`, `szabo`, `gwei`, `mwei`, `kwei`, `wei`
   - default unit: `wei`
 - BN
@@ -2564,7 +2751,7 @@ Accepted:
 Accepted:
 
 - Number
-- String with optionnal unit (ex: `'1000000'`, `'1000000 nRLC'`, `'0.01 RLC'`)
+- String with optional unit (ex: `'1000000'`, `'1000000 nRLC'`, `'0.01 RLC'`)
   - accepted units: `RCL`, `nRLC`
   - default unit: `nRLC`
 - BN
