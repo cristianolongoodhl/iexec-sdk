@@ -220,8 +220,8 @@ const depositEth = async (
     const spent = ethersBnToBn(swapEventValues.amount0In);
     return {
       txHash: tx.hash,
-      spentAmount: spent,
-      receivedAmount: received,
+      spentWei: spent,
+      receivedNRlc: received,
     };
   } catch (error) {
     debug('depositEth() error', error);
@@ -267,8 +267,8 @@ const withdrawEth = async (
     const spent = ethersBnToBn(swapEventValues.amount1In);
     return {
       txHash: tx.hash,
-      spentAmount: spent,
-      receivedAmount: received,
+      spentNRlc: spent,
+      receivedWei: received,
     };
   } catch (error) {
     debug('withdrawEth() error', error);
@@ -303,15 +303,15 @@ const estimateMatchOrderEthToSpend = async (
       vWorkerpoolorder,
       vRequestorder,
     );
-    const nRlcPrice = volume.mul(
+    const nRlcValue = volume.mul(
       new BN(apporder.appprice)
         .add(new BN(datasetorder.datasetprice))
         .add(new BN(workerpoolorder.workerpoolprice)),
     );
-    const weiToSpend = nRlcPrice.isZero()
-      ? nRlcPrice
-      : await estimateDepositEthToSpend(contracts, nRlcPrice);
-    return { weiToSpend, volume, nRlcPrice };
+    const weiToSpend = nRlcValue.isZero()
+      ? nRlcValue
+      : await estimateDepositEthToSpend(contracts, nRlcValue);
+    return { weiToSpend, volume, nRlcValue };
   } catch (error) {
     debug('estimateMatchOrderEthToSpend() error', error);
     throw error;
@@ -418,8 +418,8 @@ const matchOrdersWithEth = async (
       dealid,
       volume: ethersBnToBn(volume),
       txHash: tx.hash,
-      spentAmount: spent,
-      lockedAmount: received,
+      spentWei: spent,
+      nRlcValue: received,
     };
   } catch (error) {
     debug('matchOrdersWithEth() error', error);

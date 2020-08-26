@@ -140,18 +140,18 @@ depositEth
       );
       await connectKeystore(chain, keystore, { txOptions });
       spinner.start(info.depositing());
-      const { txHash, spentAmount, receivedAmount } = await swap.depositEth(
+      const { txHash, spentWei, receivedNRlc } = await swap.depositEth(
         chain.contracts,
         weiToSpend,
         nRlcToReceive,
       );
       spinner.succeed(
-        info.depositedEth(formatEth(spentAmount), formatRLC(receivedAmount)),
+        info.depositedEth(formatEth(spentWei), formatRLC(receivedNRlc)),
         {
           raw: {
             txHash,
-            spentAmount: spentAmount.toString(),
-            receivedAmount: receivedAmount.toString(),
+            spentWei: spentWei.toString(),
+            receivedNRlc: receivedNRlc.toString(),
           },
         },
       );
@@ -210,18 +210,18 @@ withdrawEth
       );
       await connectKeystore(chain, keystore, { txOptions });
       spinner.start(info.withdrawing());
-      const { txHash, spentAmount, receivedAmount } = await swap.withdrawEth(
+      const { txHash, spentNRlc, receivedWei } = await swap.withdrawEth(
         chain.contracts,
         nRlcToSpend,
         weiToReceive,
       );
       spinner.succeed(
-        info.withdrawnEth(formatRLC(spentAmount), formatEth(receivedAmount)),
+        info.withdrawnEth(formatRLC(spentNRlc), formatEth(receivedWei)),
         {
           raw: {
             txHash,
-            spentAmount: spentAmount.toString(),
-            receivedAmount: receivedAmount.toString(),
+            spentNRlc: spentNRlc.toString(),
+            receivedWei: receivedWei.toString(),
           },
         },
       );

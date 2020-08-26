@@ -819,7 +819,7 @@ run
           requestorder,
         );
       } else {
-        const { weiToSpend, nRlcPrice } = await estimateMatchOrderEthToSpend(
+        const { weiToSpend, nRlcValue } = await estimateMatchOrderEthToSpend(
           chain.contracts,
           apporder,
           datasetorder,
@@ -864,7 +864,7 @@ run
         );
 
         spinner.start('Submitting deal');
-        if (nRlcPrice.isZero()) {
+        if (nRlcValue.isZero()) {
           matchResult = await matchOrders(
             chain.contracts,
             apporder,
@@ -883,8 +883,8 @@ run
           );
           spinner.info(
             `Swapped ${formatEth(
-              matchResult.spentAmount,
-            )} ether to pay ${formatRLC(matchResult.lockedAmount)} RLC`,
+              matchResult.spentWei,
+            )} ether to pay ${formatRLC(matchResult.nRlcValue)} RLC`,
           );
         }
       }
