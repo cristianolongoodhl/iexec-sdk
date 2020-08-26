@@ -45,7 +45,9 @@ const getSwapEventValues = (
       }
       return false;
     });
-  const swapContractAddress = transferRlcToIexecContractEvent.args.from;
+  const swapContractAddress = fromAddress
+    ? transferRlcToIexecContractEvent.args.to
+    : transferRlcToIexecContractEvent.args.from;
   const swapInterface = new Interface(swapInterfaceDesc.abi);
   const swapEventValues = txReceipt.events
     .filter(event => event.address === swapContractAddress)
@@ -374,7 +376,7 @@ const matchOrdersWithEth = async (
     const rlcContractAddress = await contracts.fetchRLCAddress();
     const balances = await walletModule.checkBalances(
       contracts,
-      await walletModule.getAddress(),
+      await walletModule.getAddress(contracts),
     );
     const toSpendBN = new BN(vToSpend);
     if (balances.wei.lt(toSpendBN)) throw Error('Ether amount to swap exceed wallet balance');
