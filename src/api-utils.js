@@ -94,6 +94,10 @@ const jsonApi = {
     ...args,
     ...{ headers: { Accept: 'application/json', ...args.headers } },
   }).then(responseToJson),
+  put: args => httpRequest('PUT')({
+    ...args,
+    ...{ headers: { Accept: 'application/json', ...args.headers } },
+  }).then(responseToJson),
 };
 
 const downloadZipApi = {

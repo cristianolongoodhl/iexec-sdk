@@ -68,10 +68,10 @@ const fetchAppOrderbook = async (
     );
     const response = await jsonApi.get({
       api: iexecGatewayURL,
-      endpoint: '/orderbook/app',
+      endpoint: '/apporders',
       query,
     });
-    if (response.ok) return { count: response.count, appOrders: response.appOrderbook };
+    if (response.ok) return { count: response.count, appOrders: response.orders };
     throw Error('An error occured while getting orderbook');
   } catch (error) {
     debug('fetchAppOrderbook()', error);
@@ -126,13 +126,13 @@ const fetchDatasetOrderbook = async (
     );
     const response = await jsonApi.get({
       api: iexecGatewayURL,
-      endpoint: '/orderbook/dataset',
+      endpoint: '/datasetorders',
       query,
     });
     if (response.ok) {
       return {
         count: response.count,
-        datasetOrders: response.datasetOrderbook,
+        datasetOrders: response.orders,
       };
     }
     throw Error('An error occured while getting orderbook');
@@ -180,14 +180,14 @@ const fetchWorkerpoolOrderbook = async (
     );
     const response = await jsonApi.get({
       api: iexecGatewayURL,
-      endpoint: '/orderbook/workerpool',
+      endpoint: '/workerpoolorders',
       query,
     });
     if (response.ok) {
       return {
         count: response.count,
         openVolume: response.openVolume,
-        workerpoolOrders: response.workerpoolOrderbook,
+        workerpoolOrders: response.orders,
       };
     }
     throw Error('An error occured while getting orderbook');
@@ -240,13 +240,13 @@ const fetchRequestOrderbook = async (
     );
     const response = await jsonApi.get({
       api: iexecGatewayURL,
-      endpoint: '/orderbook/request',
+      endpoint: '/requestorders',
       query,
     });
     if (response.ok) {
       return {
         count: response.count,
-        requestOrders: response.requestOrderbook,
+        requestOrders: response.orders,
       };
     }
     throw Error('An error occured while getting orderbook');
